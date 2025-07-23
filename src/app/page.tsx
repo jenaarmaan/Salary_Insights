@@ -1,3 +1,9 @@
+import DashboardClient from '@/components/dashboard-client';
+
 export default function Home() {
-  return <></>;
+  return (
+    <main>
+      <DashboardClient />
+    </main>
+  );
 }
