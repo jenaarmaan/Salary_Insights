@@ -76,9 +76,16 @@ export default function DashboardClient() {
             };
           });
 
-          // Predict salaries
-          const predictions = await Promise.all(parsedData.map(emp => predictSalary({ baseSalary: emp.Base_Salary, bonus: emp.Bonus, deductions: emp.Deductions })));
-          const dataWithPredictions = parsedData.map((emp, i) => ({ ...emp, Predicted_Salary: predictions[i].predictedSalary }));
+          // Predict salaries sequentially to avoid rate limiting
+          const dataWithPredictions = [];
+          for (const emp of parsedData) {
+            const prediction = await predictSalary({
+              baseSalary: emp.Base_Salary,
+              bonus: emp.Bonus,
+              deductions: emp.Deductions,
+            });
+            dataWithPredictions.push({ ...emp, Predicted_Salary: prediction.predictedSalary });
+          }
 
           // Detect anomalies
           const anomalies = await detectSalaryAnomalies(dataWithPredictions);
