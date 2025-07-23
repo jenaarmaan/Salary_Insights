@@ -76,16 +76,23 @@ export default function DashboardClient() {
             };
           });
 
-          // Predict salaries sequentially to avoid rate limiting
-          const dataWithPredictions = [];
-          for (const emp of parsedData) {
-            const prediction = await predictSalary({
-              baseSalary: emp.Base_Salary,
-              bonus: emp.Bonus,
-              deductions: emp.Deductions,
-            });
-            dataWithPredictions.push({ ...emp, Predicted_Salary: prediction.predictedSalary });
-          }
+          // Prepare data for batch prediction
+          const predictionInput = parsedData.map(emp => ({
+            Emp_ID: emp.Emp_ID,
+            Base_Salary: emp.Base_Salary,
+            Bonus: emp.Bonus,
+            Deductions: emp.Deductions,
+          }));
+
+          const predictions = await predictSalary(predictionInput);
+
+          const predictionsMap = new Map(predictions.map(p => [p.Emp_ID, p.Predicted_Salary]));
+
+          const dataWithPredictions = parsedData.map(emp => ({
+            ...emp,
+            Predicted_Salary: predictionsMap.get(emp.Emp_ID) || 0,
+          }));
+
 
           // Detect anomalies
           const anomalies = await detectSalaryAnomalies(dataWithPredictions);

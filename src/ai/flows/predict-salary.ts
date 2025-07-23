@@ -6,19 +6,25 @@
 import {ai} from '@/ai/genkit';
 import {z} from 'genkit';
 
-const PredictSalaryInputSchema = z.object({
-  baseSalary: z.number().describe('The base salary of the employee.'),
-  bonus: z.number().describe('The bonus amount for the employee.'),
-  deductions: z.number().describe('The deductions amount for the employee.'),
-});
+const PredictSalaryInputSchema = z.array(
+  z.object({
+    Emp_ID: z.string(),
+    Base_Salary: z.number().describe('The base salary of the employee.'),
+    Bonus: z.number().describe('The bonus amount for the employee.'),
+    Deductions: z.number().describe('The deductions amount for the employee.'),
+  })
+);
 
 export type PredictSalaryInput = z.infer<typeof PredictSalaryInputSchema>;
 
-const PredictSalaryOutputSchema = z.object({
-  predictedSalary: z
-    .number()
-    .describe('The predicted total salary of the employee.'),
-});
+const PredictSalaryOutputSchema = z.array(
+  z.object({
+    Emp_ID: z.string(),
+    Predicted_Salary: z
+      .number()
+      .describe('The predicted total salary of the employee.'),
+  })
+);
 
 export type PredictSalaryOutput = z.infer<typeof PredictSalaryOutputSchema>;
 
@@ -30,13 +36,13 @@ const predictSalaryPrompt = ai.definePrompt({
   name: 'predictSalaryPrompt',
   input: {schema: PredictSalaryInputSchema},
   output: {schema: PredictSalaryOutputSchema},
-  prompt: `Given the base salary, bonus, and deductions, predict the total salary.
+  prompt: `For each employee in the provided data, predict the total salary based on their base salary, bonus, and deductions. Return an array of objects, each containing the employee's Emp_ID and their predicted salary.
 
-Base Salary: {{baseSalary}}
-Bonus: {{bonus}}
-Deductions: {{deductions}}
-
-Predicted Salary:`,
+Employee Data:
+{{#each this}}
+- Emp_ID: {{Emp_ID}}, Base Salary: {{Base_Salary}}, Bonus: {{Bonus}}, Deductions: {{Deductions}}
+{{/each}}
+`,
 });
 
 const predictSalaryFlow = ai.defineFlow(

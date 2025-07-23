@@ -7,6 +7,6 @@ export type Employee = {
   Deductions: number;
   Month: string;
   Total_Salary: number;
-  Predicted_Salary?: number;
+  Predicted_Salary: number;
   Anomaly_Label?: 'Anomaly' | 'Normal';
 };
