@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useMemo } from 'react';
+import React from 'react';
+import { useState, useMemo, useRef, ChangeEvent } from 'react';
 import type { Employee } from '@/types';
 import {
   Table,
@@ -28,16 +29,16 @@ export function EmployeeDataTable({ data }: { data: Employee[] }) {
     let sortableItems = [...data];
     if (sortConfig.key !== null) {
       sortableItems.sort((a, b) => {
-        const aValue = a[sortConfig.key!];
-        const bValue = b[sortConfig.key!];
+        const key = sortConfig.key!;
+        const aValue = (a as any)[key];
+        const bValue = (b as any)[key];
 
         if (aValue === undefined || bValue === undefined) return 0;
-
-        if (aValue < bValue) {
-          return sortConfig.direction === 'ascending' ? -1 : 1;
+        if (typeof aValue === 'string' && typeof bValue === 'string') {
+          return sortConfig.direction === 'ascending' ? aValue.localeCompare(bValue) : bValue.localeCompare(aValue);
         }
-        if (aValue > bValue) {
-          return sortConfig.direction === 'ascending' ? 1 : -1;
+        if (typeof aValue === 'number' && typeof bValue === 'number') {
+          return sortConfig.direction === 'ascending' ? aValue - bValue : bValue - aValue;
         }
         return 0;
       });
@@ -59,13 +60,13 @@ export function EmployeeDataTable({ data }: { data: Employee[] }) {
     }
     setSortConfig({ key, direction });
   };
-  
+
   const formatCurrency = (value: number | undefined) => {
     if (value === undefined) return 'N/A';
     return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(value);
   }
 
-  const SortableHeader = ({ tkey, label }: {tkey: keyof Employee, label: string}) => (
+  const SortableHeader = ({ tkey, label }: { tkey: keyof Employee, label: string }) => (
     <TableHead>
       <Button variant="ghost" onClick={() => requestSort(tkey)}>
         {label}
@@ -84,26 +85,33 @@ export function EmployeeDataTable({ data }: { data: Employee[] }) {
               <SortableHeader tkey="Name" label="Name" />
               <SortableHeader tkey="Department" label="Department" />
               <SortableHeader tkey="Total_Salary" label="Total Salary" />
-              <SortableHeader tkey="Predicted_Salary" label="Predicted Salary" />
+              <SortableHeader tkey="Predicted_Salary" label="Predicted (90% CI)" />
               <SortableHeader tkey="Anomaly_Label" label="Anomaly" />
             </TableRow>
           </TableHeader>
           <TableBody>
-            {paginatedData.map((employee) => (
+            {paginatedData.map((employee: Employee) => (
               <TableRow key={employee.Emp_ID} className={employee.Anomaly_Label === 'Anomaly' ? 'bg-destructive/10' : ''}>
                 <TableCell>{employee.Emp_ID}</TableCell>
                 <TableCell className="font-medium">{employee.Name}</TableCell>
                 <TableCell>{employee.Department}</TableCell>
                 <TableCell>{formatCurrency(employee.Total_Salary)}</TableCell>
-                <TableCell>{formatCurrency(employee.Predicted_Salary)}</TableCell>
+                <TableCell>
+                  <div className="font-medium">{formatCurrency(employee.Predicted_Salary)}</div>
+                  {employee.Lower_Bound && employee.Upper_Bound && (
+                    <div className="text-[10px] text-muted-foreground">
+                      [{formatCurrency(employee.Lower_Bound)} - {formatCurrency(employee.Upper_Bound)}]
+                    </div>
+                  )}
+                </TableCell>
                 <TableCell>
                   {employee.Anomaly_Label === 'Anomaly' ? (
-                    <Badge variant="destructive" className="flex items-center w-fit">
+                    <Badge {...{ variant: "destructive" as any, className: "flex items-center w-fit" } as any}>
                       <AlertTriangle className="mr-1 h-3 w-3" />
                       Anomaly
                     </Badge>
                   ) : (
-                    <Badge variant="secondary">Normal</Badge>
+                    <Badge {...{ variant: "secondary" as any, className: "w-fit" } as any}>Normal</Badge>
                   )}
                 </TableCell>
               </TableRow>

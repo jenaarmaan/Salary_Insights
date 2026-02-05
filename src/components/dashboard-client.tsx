@@ -1,21 +1,27 @@
 "use client";
+/**
+ * DashboardClient component for Salary Insights.
+ * Handles CSV upload, ML analysis, and visualization.
+ */
 
+import React from 'react';
 import { useState, useMemo, useRef, ChangeEvent } from 'react';
-import type { Employee } from '@/types';
-import { predictSalary } from '@/ai/flows/predict-salary';
-import { detectSalaryAnomalies } from '@/ai/flows/detect-salary-anomalies';
+import type { Employee, AnalysisResults } from '@/types';
+import { analyzeSalaries } from '@/lib/ml-service';
 import { useToast } from "@/hooks/use-toast";
 
+import { UploadCloud, FileText, BarChart3, PieChart, AlertTriangle, Building2, Loader2, ShieldCheck, Activity } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { EmployeeDataTable } from '@/components/employee-data-table';
 import { DepartmentPieChart } from '@/components/charts/department-pie-chart';
 import { SalaryComparisonChart } from '@/components/charts/salary-comparison-chart';
-import { UploadCloud, FileText, BarChart3, PieChart, AlertTriangle, Building2, Loader2 } from 'lucide-react';
 
 export default function DashboardClient() {
   const [employees, setEmployees] = useState<Employee[]>([]);
+  const [fairnessInsights, setFairnessInsights] = useState<AnalysisResults['fairness_insights'] | null>(null);
+  const [driftInsights, setDriftInsights] = useState<AnalysisResults['drift_insights'] | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [fileName, setFileName] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -44,12 +50,12 @@ export default function DashboardClient() {
           const rows = text.split(/\r?\n/).filter(row => row.trim() !== '');
           const headers = rows[0].split(',').map(h => h.trim());
           const requiredHeaders = ['Emp_ID', 'Name', 'Department', 'Base_Salary', 'Bonus', 'Deductions', 'Month'];
-          
+
           if (!requiredHeaders.every(h => headers.includes(h))) {
             throw new Error('CSV must include required headers: Emp_ID, Name, Department, Base_Salary, Bonus, Deductions, Month');
           }
 
-          const parsedData: Employee[] = rows.slice(1).map((row, i) => {
+          const parsedData: Employee[] = rows.slice(1).map((row: string, i: number) => {
             const values = row.split(',');
             const entry: any = {};
             headers.forEach((header, index) => {
@@ -63,7 +69,7 @@ export default function DashboardClient() {
             if (isNaN(baseSalary) || isNaN(bonus) || isNaN(deductions)) {
               throw new Error(`Invalid number format in row ${i + 2}.`);
             }
-            
+
             return {
               Emp_ID: entry.Emp_ID,
               Name: entry.Name,
@@ -76,27 +82,11 @@ export default function DashboardClient() {
             };
           });
 
-          // Prepare data for batch prediction
-          const predictionInput = parsedData.map(emp => ({
-            Emp_ID: emp.Emp_ID,
-            Base_Salary: emp.Base_Salary,
-            Bonus: emp.Bonus,
-            Deductions: emp.Deductions,
-          }));
-
-          const predictions = await predictSalary(predictionInput);
-
-          const predictionsMap = new Map(predictions.map(p => [p.Emp_ID, p.Predicted_Salary]));
-
-          const dataWithPredictions = parsedData.map(emp => ({
-            ...emp,
-            Predicted_Salary: predictionsMap.get(emp.Emp_ID) || 0,
-          }));
-
-
-          // Detect anomalies
-          const anomalies = await detectSalaryAnomalies(dataWithPredictions);
-          setEmployees(anomalies);
+          // Analyze salaries using the unified ML service
+          const results = await analyzeSalaries(parsedData);
+          setEmployees(results.employees);
+          setFairnessInsights(results.fairness_insights);
+          setDriftInsights(results.drift_insights);
 
         } catch (error: any) {
           toast({
@@ -121,7 +111,7 @@ export default function DashboardClient() {
   const departmentData = useMemo(() => {
     if (!employees.length) return [];
     const deptMap = new Map<string, number>();
-    employees.forEach(emp => {
+    employees.forEach((emp: Employee) => {
       deptMap.set(emp.Department, (deptMap.get(emp.Department) || 0) + emp.Total_Salary);
     });
     return Array.from(deptMap.entries()).map(([name, value]) => ({ name, value }));
@@ -154,11 +144,11 @@ export default function DashboardClient() {
         </header>
 
         {isProcessing && (
-           <Card className="text-center p-12">
+          <Card className="text-center p-12">
             <Loader2 className="mx-auto h-12 w-12 animate-spin text-primary" />
             <CardTitle className="mt-4">Processing Data</CardTitle>
             <CardDescription>Analyzing salaries and detecting anomalies. Please wait.</CardDescription>
-           </Card>
+          </Card>
         )}
 
         {!isProcessing && employees.length === 0 && (
@@ -173,6 +163,39 @@ export default function DashboardClient() {
 
         {employees.length > 0 && !isProcessing && (
           <div className="grid gap-6">
+            <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              <Card className="bg-primary/5 border-primary/20">
+                <CardHeader className="pb-2">
+                  <CardDescription className="flex items-center text-primary"><ShieldCheck className="mr-2 h-4 w-4" /> Parity Score</CardDescription>
+                  <CardTitle className="text-2xl">{fairnessInsights?.parity_score.toFixed(1)}%</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <p className="text-xs text-muted-foreground">{fairnessInsights?.recommendation}</p>
+                </CardContent>
+              </Card>
+              <Card className={driftInsights?.drift_detected ? "bg-destructive/5 border-destructive/20" : "bg-secondary/5 border-secondary/20"}>
+                <CardHeader className="pb-2">
+                  <CardDescription className="flex items-center"><Activity className="mr-2 h-4 w-4" /> System Drift</CardDescription>
+                  <CardTitle className="text-2xl">{driftInsights?.drift_detected ? "Detected" : "Stable"}</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <p className="text-xs text-muted-foreground">{driftInsights?.status}</p>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardDescription>Total Employees</CardDescription>
+                  <CardTitle className="text-2xl">{employees.length}</CardTitle>
+                </CardHeader>
+              </Card>
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardDescription>Anomalies Detected</CardDescription>
+                  <CardTitle className="text-2xl text-destructive">{employees.filter(e => e.Anomaly_Label === 'Anomaly').length}</CardTitle>
+                </CardHeader>
+              </Card>
+            </div>
+
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center">
